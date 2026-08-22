@@ -13,9 +13,12 @@
 <meta name="apple-mobile-web-app-title" content="School Results" />
 <meta name="mobile-web-app-capable" content="yes" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   html,body,#root{margin:0;padding:0;background:#f4f4f4;}
   *{box-sizing:border-box;}
+  .report-card{page-break-after:always;}
+  .print-classlist{page-break-after:always;}
 </style>
 <script>
 /**
@@ -1754,7 +1757,7 @@ function ReportCard({ learner, grade, stream, term, year, classTeacher, closingD
       <div style={RC.header}>
         <div style={RC.schoolName}>{(schoolName||"Your School Name").toUpperCase()}</div>
         {schoolPOBox && <div style={RC.schoolSub}>{schoolPOBox}</div>}
-        <div style={RC.schoolSub}>{schoolCounty ? schoolCounty.toUpperCase()+" · " : ""}Junior Secondary School</div>
+        {schoolCounty && <div style={RC.schoolSub}>{schoolCounty.toUpperCase()}</div>}
         {schoolMotto && <div style={{...RC.schoolSub,fontStyle:"italic"}}>Motto: {schoolMotto}</div>}
         {contactLine && <div style={{...RC.schoolSub,fontSize:9}}>{contactLine}</div>}
         <div style={RC.reportTitle}>LEARNER'S {term.toUpperCase()} PROGRESS REPORT — {year}</div>
@@ -1900,58 +1903,62 @@ function ScoreEntryModal({ learner, grade, splitMode, classOptions, onSave, onCl
   const [streamSel, setStreamSel] = useState(learner.stream || opts[0] || "");
   return (
     <div style={M.overlay}>
-      <div style={M.box}>
-        <div style={M.title}>Edit Learner — {learner.name}</div>
-        <div style={{display:"flex",gap:11,marginBottom:14,flexWrap:"wrap"}}>
-          <div style={{...M.field,flex:2,minWidth:180}}>
-            <label style={M.label}>Full Name</label>
-            <input style={M.input} value={name} onChange={e=>setName(e.target.value.toUpperCase())} />
-          </div>
-          {splitMode && (
-            <div style={{...M.field,flex:1,minWidth:120}}>
-              <label style={M.label}>Class</label>
-              <select style={M.input} value={streamSel} onChange={e=>setStreamSel(e.target.value)}>
-                {opts.map(s => <option key={s||"main"} value={s}>{s || "Main"}</option>)}
-              </select>
+      <div style={M.boxScroll}>
+        <div style={{padding:"20px 20px 0"}}>
+          <div style={M.title}>Edit Learner — {learner.name}</div>
+          <div style={{display:"flex",gap:11,marginBottom:14,flexWrap:"wrap"}}>
+            <div style={{...M.field,flex:2,minWidth:180}}>
+              <label style={M.label}>Full Name</label>
+              <input style={M.input} value={name} onChange={e=>setName(e.target.value.toUpperCase())} />
             </div>
-          )}
+            {splitMode && (
+              <div style={{...M.field,flex:1,minWidth:120}}>
+                <label style={M.label}>Class</label>
+                <select style={M.input} value={streamSel} onChange={e=>setStreamSel(e.target.value)}>
+                  {opts.map(s => <option key={s||"main"} value={s}>{s || "Main"}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:11}}>
-          {SUBJECTS.map(sub=>{
-            const so = scores[sub] || {cat:"",exam:""};
-            const tot = subjectTotal(scores, sub);
-            return (
-              <div key={sub} style={{border:"1px solid #ddd",borderRadius:8,padding:8}}>
-                <label style={{...M.label,marginBottom:6,display:"block"}}>{sub} <span style={{fontWeight:400,color:"#888"}}>({tot!==""?tot:"–"}/100)</span></label>
-                <div style={{display:"flex",gap:6}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:10,color:"#888",marginBottom:2}}>CAT /30</div>
-                    <input style={M.input} type="number" min="0" max="30"
-                      value={so.cat}
-                      onChange={e=>{
-                        let v = e.target.value;
-                        if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(30, Number(v))); }
-                        setScores(p=>({...p,[sub]:{...(p[sub]||{cat:"",exam:""}),cat:v}}));
-                      }}
-                      placeholder="–" />
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:10,color:"#888",marginBottom:2}}>Exam /70</div>
-                    <input style={M.input} type="number" min="0" max="70"
-                      value={so.exam}
-                      onChange={e=>{
-                        let v = e.target.value;
-                        if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(70, Number(v))); }
-                        setScores(p=>({...p,[sub]:{...(p[sub]||{cat:"",exam:""}),exam:v}}));
-                      }}
-                      placeholder="–" />
+        <div style={{overflowY:"auto",flex:1,padding:"0 20px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:11,paddingBottom:14}}>
+            {SUBJECTS.map(sub=>{
+              const so = scores[sub] || {cat:"",exam:""};
+              const tot = subjectTotal(scores, sub);
+              return (
+                <div key={sub} style={{border:"1px solid #ddd",borderRadius:8,padding:8}}>
+                  <label style={{...M.label,marginBottom:6,display:"block"}}>{sub} <span style={{fontWeight:400,color:"#888"}}>({tot!==""?tot:"–"}/100)</span></label>
+                  <div style={{display:"flex",gap:6}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:10,color:"#888",marginBottom:2}}>CAT /30</div>
+                      <input style={M.input} type="number" min="0" max="30"
+                        value={so.cat}
+                        onChange={e=>{
+                          let v = e.target.value;
+                          if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(30, Number(v))); }
+                          setScores(p=>({...p,[sub]:{...(p[sub]||{cat:"",exam:""}),cat:v}}));
+                        }}
+                        placeholder="–" />
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:10,color:"#888",marginBottom:2}}>Exam /70</div>
+                      <input style={M.input} type="number" min="0" max="70"
+                        value={so.exam}
+                        onChange={e=>{
+                          let v = e.target.value;
+                          if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(70, Number(v))); }
+                          setScores(p=>({...p,[sub]:{...(p[sub]||{cat:"",exam:""}),exam:v}}));
+                        }}
+                        placeholder="–" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-        <div style={M.actions}>
+        <div style={{...M.actions,padding:"14px 20px",margin:0,borderTop:"1px solid #eee",background:"#fff"}}>
           <button style={M.cancel} onClick={onClose}>Cancel</button>
           <button style={M.save} onClick={()=>onSave({name:name.trim()||learner.name, scores, stream:streamSel})}>Save</button>
         </div>
@@ -2604,20 +2611,30 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
 </body></html>`;
   }
 
-  function handleDownload(mode, filename) {
+  const [pdfBusy, setPdfBusy] = useState(false);
+  async function handleDownload(mode, filename) {
     const isList = mode==="blank" || mode==="filled";
     const node = findPrintNode(mode);
     if (!node) { alert("That report isn't ready yet — make sure marks have been entered, then try again."); return; }
-    const html = buildPrintableHTML(node, isList, filename, false);
-    const blob = new Blob([html], {type:"text/html"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `${filename}.html`;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url), 3000);
+    if (typeof html2pdf === "undefined") {
+      alert("PDF generator hasn't finished loading yet — check your internet connection and try again in a moment.");
+      return;
+    }
+    setPdfBusy(true);
+    try {
+      await html2pdf().set({
+        margin: 0.3,
+        filename: `${filename}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+        jsPDF: { unit: "in", format: "a4", orientation: isList ? "landscape" : "portrait" },
+        pagebreak: { mode: ["css", "legacy"] }
+      }).from(node).save();
+    } catch (e) {
+      alert("Could not generate the PDF. Please try again — if it keeps failing, use the 🖨 Print button instead and choose 'Save as PDF' from the print dialog.");
+    } finally {
+      setPdfBusy(false);
+    }
   }
 
   // Opens the printable content in a new tab and triggers the print dialog
@@ -2900,7 +2917,7 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
       />}
       <div style={S.header}>
         <div style={S.schoolName}>{(schoolName||"Your School Name").toUpperCase()}</div>
-        <div style={S.schoolSub}>{schoolCounty||"Location"} · Junior Secondary School</div>
+        <div style={S.schoolSub}>{schoolCounty||""}</div>
         <div style={S.systemTitle}>CBC Learner Ranking & Report Card System</div>
         <div style={{marginTop:6,fontSize:12,color:"#ccc"}}>
           Logged in as <b>{userSession.name}</b> ({userSession.role === "admin" ? "Administrator" : "Class Teacher"})
@@ -3218,11 +3235,11 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
             <button style={S.ghostBtn} onClick={()=>setSortMode(sortMode==="rank"?"name":"rank")}>
               {sortMode==="rank" ? "🔤 Sort A–Z" : "🏆 Sort by Rank"}
             </button>
-            <button style={S.ghostBtn} onClick={()=>handleDownload("blank",`Grade${grade}${viewMode==="combined"?"_Combined":(stream?"_"+stream:"")}_BlankList`)}>⬇ Download Blank Class List</button>
+            <button style={S.ghostBtn} disabled={pdfBusy} onClick={()=>handleDownload("blank",`Grade${grade}${viewMode==="combined"?"_Combined":(stream?"_"+stream:"")}_BlankList`)}>{pdfBusy?"Generating PDF…":"⬇ Download Blank Class List"}</button>
             <button style={S.ghostBtn} onClick={()=>handlePrint("blank",`Grade${grade}${viewMode==="combined"?"_Combined":(stream?"_"+stream:"")}_BlankList`)}>🖨 Print Blank Class List</button>
-            {hasScores && <button style={S.ghostBtn} onClick={()=>handleDownload("filled",`Grade${grade}${viewMode==="combined"?"_Combined":(stream?"_"+stream:"")}_ResultsList`)}>⬇ Download Results List</button>}
+            {hasScores && <button style={S.ghostBtn} disabled={pdfBusy} onClick={()=>handleDownload("filled",`Grade${grade}${viewMode==="combined"?"_Combined":(stream?"_"+stream:"")}_ResultsList`)}>{pdfBusy?"Generating PDF…":"⬇ Download Results List"}</button>}
             {hasScores && <button style={S.ghostBtn} onClick={()=>handlePrint("filled",`Grade${grade}${viewMode==="combined"?"_Combined":(stream?"_"+stream:"")}_ResultsList`)}>🖨 Print Results List</button>}
-            {hasScores && <button style={S.ghostBtn} onClick={()=>handleDownload("all",`Grade${grade}${viewMode==="combined"?"_Combined":(stream?"_"+stream:"")}_AllReportForms`)}>⬇ Download All Report Forms</button>}
+            {hasScores && <button style={S.ghostBtn} disabled={pdfBusy} onClick={()=>handleDownload("all",`Grade${grade}${viewMode==="combined"?"_Combined":(stream?"_"+stream:"")}_AllReportForms`)}>{pdfBusy?"Generating PDF… (may take a moment for a full class)":"⬇ Download All Report Forms"}</button>}
             {hasScores && <button style={S.ghostBtn} onClick={()=>handlePrint("all",`Grade${grade}${viewMode==="combined"?"_Combined":(stream?"_"+stream:"")}_AllReportForms`)}>🖨 Print All Report Forms</button>}
             <button style={S.ghostBtn} onClick={handleDownloadCSV}>⬇ CSV</button>
             <button style={S.ghostBtn} onClick={handleDownloadTemplate}>⬇ Marks Template (CSV)</button>
@@ -3325,7 +3342,7 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
                     <td style={{...S.tdC,fontWeight:700,fontSize:10,borderRight:"1px solid #e0e0e0"}}>{og?og.sub:"–"}</td>
                     <td style={{...S.tdC,whiteSpace:"nowrap"}}>
                       <button style={S.actionBtn} title="Edit" onClick={()=>setEditingLearner({...l,stream:l.stream||stream})}>✏️</button>
-                      {l.total>0&&<button style={S.actionBtn} title="Download report form" onClick={()=>handleDownload(l,`${l.name.replace(/\s+/g,"_")}_ReportForm`)}>⬇</button>}
+                      {l.total>0&&<button style={S.actionBtn} disabled={pdfBusy} title="Download report form" onClick={()=>handleDownload(l,`${l.name.replace(/\s+/g,"_")}_ReportForm`)}>⬇</button>}
                       {l.total>0&&<button style={S.actionBtn} title="Print report form" onClick={()=>handlePrint(l,`${l.name.replace(/\s+/g,"_")}_ReportForm`)}>🖨</button>}
                       <button style={S.actionBtn} title="Remove" onClick={()=>handleDeleteLearner(l.name,l.stream||stream)}>🗑️</button>
                     </td>
@@ -3490,6 +3507,7 @@ const CL = {
 const M = {
   overlay: {position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999},
   box:     {background:"#fff",borderRadius:12,padding:24,maxWidth:480,width:"90%",boxShadow:"0 8px 32px rgba(0,0,0,0.18)",border:"1px solid #ccc"},
+  boxScroll: {background:"#fff",borderRadius:12,maxWidth:560,width:"92%",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 32px rgba(0,0,0,0.18)",border:"1px solid #ccc",overflow:"hidden"},
   title:   {fontWeight:800,fontSize:16,color:"#000",marginBottom:14,borderBottom:"2px solid #000",paddingBottom:7},
   grid:    {display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:11,marginBottom:18},
   field:   {display:"flex",flexDirection:"column",gap:4,marginBottom:10},

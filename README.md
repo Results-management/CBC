@@ -87,6 +87,17 @@ as before.
 ## Notes
 - Data lives in `db.json` in your GitHub repo — every teacher's device stays
   in sync automatically as long as they're connected.
+- **⬇ Download buttons now produce real PDF files** (using a client-side PDF
+  generator), not HTML. Downloading "All Report Forms" for a full class can
+  take a few seconds — the button shows "Generating PDF…" while it works.
+  The 🖨 Print buttons still open the browser's print dialog as before,
+  which also lets you choose "Save as PDF" if you prefer that route.
+- **The "Edit Learner" screen now scrolls properly** — the Save/Cancel
+  buttons stay pinned at the bottom while the subject list scrolls above them,
+  so they're always reachable on a phone screen.
+- **The header no longer adds a redundant "Junior Secondary School" line** —
+  it shows exactly what you enter in School Settings (name, P.O. Box,
+  county, motto, contact) and nothing else.
 - Report cards and class lists print via the browser's Print dialog
   (Print → Save as PDF).
 - Never share your GitHub Personal Access Token outside the app's own
