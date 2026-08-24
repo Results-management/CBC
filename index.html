@@ -17,8 +17,7 @@
 <style>
   html,body,#root{margin:0;padding:0;background:#f4f4f4;}
   *{box-sizing:border-box;}
-  .report-card{page-break-after:always;}
-  .print-classlist{page-break-after:always;}
+  .report-card{page-break-inside:avoid;}
 </style>
 <script>
 /**
@@ -1110,8 +1109,9 @@ function YearAdvancementWizard({ fromYear, toYear, classesConfig, onDone, onSkip
   const [newGr7Classes, setNewGr7Classes] = useState([""]);
   const [newClassInput, setNewClassInput] = useState("");
   const [newGr7Teachers, setNewGr7Teachers] = useState({});
-  const [newGr7Learners, setNewGr7Learners] = useState([]); // [{name, cls}]
+  const [newGr7Learners, setNewGr7Learners] = useState([]); // [{name, admNo, cls}]
   const [newLearnerName, setNewLearnerName] = useState("");
+  const [newLearnerAdmNo, setNewLearnerAdmNo] = useState("");
   const [newLearnerClass, setNewLearnerClass] = useState("");
 
   const [applying, setApplying] = useState(false);
@@ -1156,8 +1156,9 @@ function YearAdvancementWizard({ fromYear, toYear, classesConfig, onDone, onSkip
     if (!n) return;
     if (newGr7Learners.find(l=>l.name===n)) return;
     const cls = newGr7Classes.length > 1 ? (newLearnerClass || newGr7Classes[0]) : newGr7Classes[0];
-    setNewGr7Learners(prev => [...prev, {name:n, cls}]);
+    setNewGr7Learners(prev => [...prev, {name:n, admNo:newLearnerAdmNo.trim(), cls}]);
     setNewLearnerName("");
+    setNewLearnerAdmNo("");
   }
   function removeNewLearner(name) {
     setNewGr7Learners(prev => prev.filter(l=>l.name!==name));
@@ -1181,7 +1182,7 @@ function YearAdvancementWizard({ fromYear, toYear, classesConfig, onDone, onSkip
       for (const s of grade8Classes) {
         const stored = await loadShared(learnersKey("8", s), null);
         const base = stored || (INITIAL_LEARNERS["8"] && INITIAL_LEARNERS["8"][s]) || [];
-        await saveShared(learnersKey("9", s), base.map(l=>({name:l.name})));
+        await saveShared(learnersKey("9", s), base.map(l=>({name:l.name, admNo:l.admNo||""})));
         await saveShared(`sision_teacher_9_${s||"none"}_${toYear}`, grade9Teachers[s] || "");
       }
 
@@ -1189,13 +1190,13 @@ function YearAdvancementWizard({ fromYear, toYear, classesConfig, onDone, onSkip
       for (const s of grade7Classes) {
         const stored = await loadShared(learnersKey("7", s), null);
         const base = stored || (INITIAL_LEARNERS["7"] && INITIAL_LEARNERS["7"][s]) || [];
-        await saveShared(learnersKey("8", s), base.map(l=>({name:l.name})));
+        await saveShared(learnersKey("8", s), base.map(l=>({name:l.name, admNo:l.admNo||""})));
         await saveShared(`sision_teacher_8_${s||"none"}_${toYear}`, grade8Teachers[s] || "");
       }
 
       // ── 4. New Grade 7 intake ──────────────────────────────────────────
       for (const s of newGr7Classes) {
-        const list = newGr7Learners.filter(l => l.cls === s).map(l => ({name: l.name}));
+        const list = newGr7Learners.filter(l => l.cls === s).map(l => ({name: l.name, admNo: l.admNo||""}));
         await saveShared(learnersKey("7", s), list);
         await saveShared(`sision_teacher_7_${s||"none"}_${toYear}`, newGr7Teachers[s] || "");
       }
@@ -1369,6 +1370,10 @@ function YearAdvancementWizard({ fromYear, toYear, classesConfig, onDone, onSkip
             <div style={{border:"1.5px solid #e0e0e0",borderRadius:8,padding:14,marginBottom:14}}>
               <div style={{fontWeight:700,fontSize:12,marginBottom:8,color:"#333"}}>ADD LEARNERS</div>
               <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+                <input style={{...inp,flex:1,minWidth:110}} value={newLearnerAdmNo}
+                  onChange={e=>setNewLearnerAdmNo(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); addNewLearner(); }}}
+                  placeholder="Assessment No."/>
                 <input style={{...inp,flex:2,minWidth:180}} value={newLearnerName}
                   onChange={e=>setNewLearnerName(e.target.value.toUpperCase())}
                   onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); addNewLearner(); }}}
@@ -1385,7 +1390,7 @@ function YearAdvancementWizard({ fromYear, toYear, classesConfig, onDone, onSkip
                 {newGr7Learners.map((l,i)=>(
                   <span key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 8px",
                     borderRadius:16,fontSize:11,fontWeight:700,background:"#f3f4f6",color:"#374151"}}>
-                    {l.name}{newGr7Classes.length>1?<span style={{fontSize:10,opacity:0.8}}> ({l.cls||"Main"})</span>:null}
+                    {l.admNo?`${l.admNo} — `:""}{l.name}{newGr7Classes.length>1?<span style={{fontSize:10,opacity:0.8}}> ({l.cls||"Main"})</span>:null}
                     <button onClick={()=>removeNewLearner(l.name)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#888",padding:0,lineHeight:1}}>×</button>
                   </span>
                 ))}
@@ -1434,24 +1439,20 @@ function YearAdvancementWizard({ fromYear, toYear, classesConfig, onDone, onSkip
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
-// Every subject's mark is now a CAT (out of 30) plus an Exam (out of 70),
-// stored as {cat, exam}. subjectTotal() is the single place that turns that
-// into the 0-100 number used everywhere else (grading, ranking, printing).
-function blankScores() { const s={}; SUBJECTS.forEach(sub=>s[sub]={cat:"",exam:""}); return s; }
+// Every subject's mark is a single score out of 100 (Mid Term / End Term).
+// subjectTotal() is the one place that normalizes it for grading/ranking/printing.
+function blankScores() { const s={}; SUBJECTS.forEach(sub=>s[sub]=""); return s; }
 function subjectTotal(scores, sub) {
-  const so = scores && scores[sub];
-  if (!so || typeof so !== "object") return "";
-  const c = (so.cat===""||so.cat===null||so.cat===undefined||isNaN(Number(so.cat))) ? "" : Number(so.cat);
-  const e = (so.exam===""||so.exam===null||so.exam===undefined||isNaN(Number(so.exam))) ? "" : Number(so.exam);
-  if (c==="" && e==="") return "";
-  return Math.min(100, (c===""?0:c) + (e===""?0:e));
+  const v = scores && scores[sub];
+  if (v==="" || v===null || v===undefined || isNaN(Number(v))) return "";
+  return Number(v);
 }
 
 // Rank a list and attach .rank, .streamRank (Grade 8), .overallRank (Grade 8)
 function rankLearners(data, streamTag) {
   const withStats = data.map(l => {
     const scores = {};
-    SUBJECTS.forEach(s => scores[s] = l.scores && l.scores[s] ? l.scores[s] : {cat:"",exam:""});
+    SUBJECTS.forEach(s => scores[s] = l.scores ? (l.scores[s]??"") : "");
     return { ...l, scores, stream: l.stream || streamTag || "", ...calcStats(scores) };
   });
   withStats.sort((a,b)=>b.total-a.total||b.points-a.points);
@@ -1532,11 +1533,13 @@ function parseCSVText(text) {
 }
 
 // ─── RESULTS ANALYSIS ──────────────────────────────────────────────────────
-function ResultsAnalysisModal({ ranked, levelCounts, means, label, term, year, onClose }) {
+function ResultsAnalysisModal({ ranked, levelCounts, means, label, term, year, schoolName, schoolCounty, onClose }) {
   const total = ranked.length;
   const marked = ranked.filter(r => r.total > 0);
   const passCount = marked.filter(r => r.level==="EE" || r.level==="ME").length;
   const passRate = marked.length ? Math.round((passCount/marked.length)*100) : 0;
+  const contentRef = useRef(null);
+  const [busy, setBusy] = useState(false);
 
   // Per-subject grade distribution
   const subjectDist = {};
@@ -1557,8 +1560,8 @@ function ResultsAnalysisModal({ ranked, levelCounts, means, label, term, year, o
 
   const box = { position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1000,
     display:"flex", alignItems:"center", justifyContent:"center", padding:12 };
-  const panel = { background:"#fff", borderRadius:14, padding:24, maxWidth:720, width:"100%",
-    maxHeight:"92vh", overflowY:"auto", boxShadow:"0 8px 40px rgba(0,0,0,0.3)" };
+  const panel = { background:"#fff", borderRadius:14, maxWidth:720, width:"100%",
+    maxHeight:"92vh", display:"flex", flexDirection:"column", boxShadow:"0 8px 40px rgba(0,0,0,0.3)" };
   const h2 = { fontWeight:900, fontSize:18, borderBottom:"3px solid #000", paddingBottom:8, marginBottom:14 };
   const sectionH = { fontWeight:800, fontSize:13, margin:"18px 0 8px", borderLeft:"4px solid #000", paddingLeft:8 };
   const statGrid = { display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(90px,1fr))", gap:8, marginBottom:6 };
@@ -1567,93 +1570,160 @@ function ResultsAnalysisModal({ ranked, levelCounts, means, label, term, year, o
   const th = { border:"1px solid #ddd", padding:"5px 6px", background:"#f0f0f0", fontSize:10.5, textTransform:"uppercase" };
   const td = { border:"1px solid #ddd", padding:"5px 6px", textAlign:"center" };
 
+  function buildAnalysisHTML() {
+    const inner = contentRef.current ? contentRef.current.innerHTML : "";
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${label} Results Analysis</title>
+<style>
+  body{font-family:-apple-system,Arial,sans-serif;color:#111;padding:24px;}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px;}
+  th,td{border:1px solid #ddd;padding:5px 6px;text-align:center;}
+  th{background:#f0f0f0;font-size:10.5px;text-transform:uppercase;}
+  td:first-child,th:first-child{text-align:left;}
+  h1{font-size:16px;margin:0 0 2px;}
+  .sub{font-size:11px;color:#555;margin-bottom:14px;}
+  .sectionH{font-weight:800;font-size:13px;margin:18px 0 8px;border-left:4px solid #000;padding-left:8px;}
+  .statGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:6px;}
+  .statBox{background:#f4f4f4;border-radius:8px;padding:10px 6px;text-align:center;}
+  .statN{font-weight:900;font-size:20px;}
+  .statL{font-weight:700;font-size:10.5px;}
+  @media print{ body{padding:8px;} }
+</style></head><body>
+<h1>${(schoolName||"Results Analysis").toUpperCase()}${schoolCounty?" — "+schoolCounty.toUpperCase():""}</h1>
+<div class="sub">📊 Results Analysis — ${label} · ${term} ${year} · ${marked.length} of ${total} learner(s) with marks entered</div>
+${inner}
+</body></html>`;
+  }
+
+  function handlePrintAnalysis() {
+    const html = buildAnalysisHTML()
+      .replace(/class="sectionH"/g, 'style="font-weight:800;font-size:13px;margin:18px 0 8px;border-left:4px solid #000;padding-left:8px;"')
+      .replace(/class="statGrid"/g, 'style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:6px;"')
+      .replace(/class="statBox"/g, 'style="background:#f4f4f4;border-radius:8px;padding:10px 6px;text-align:center;"');
+    const w = window.open("", "_blank");
+    if (!w) { alert("Please allow pop-ups to print."); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(()=>{ w.focus(); w.print(); }, 300);
+  }
+
+  async function handleDownloadAnalysis() {
+    if (typeof html2pdf === "undefined") {
+      alert("PDF generator hasn't finished loading yet — check your internet connection and try again in a moment.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await html2pdf().set({
+        margin: 0.4,
+        filename: `${label.replace(/\s+/g,"_")}_ResultsAnalysis.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+        jsPDF: { unit: "in", format: "a4", orientation: "portrait" }
+      }).from(contentRef.current).save();
+    } catch (e) {
+      alert("Could not generate the PDF. Please try again, or use 🖨 Print instead.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div style={box} className="no-print">
       <div style={panel}>
-        <div style={h2}>📊 Results Analysis — {label}</div>
-        <div style={{fontSize:12, color:"#666", marginTop:-8, marginBottom:14}}>{term} {year} · {marked.length} of {total} learner(s) with marks entered</div>
-
-        <div style={sectionH}>Overall Distribution</div>
-        <div style={statGrid}>
-          {["EE","ME","AE","BE"].map(lv=>(
-            <div key={lv} style={statBox}>
-              <div style={{fontWeight:900, fontSize:22}}>{levelCounts[lv]}</div>
-              <div style={{fontWeight:700, fontSize:11}}>{lv}</div>
-            </div>
-          ))}
-          <div style={statBox}>
-            <div style={{fontWeight:900, fontSize:22}}>{means["_classMean"]!=="–"?means["_classMean"]+"%":"–"}</div>
-            <div style={{fontWeight:700, fontSize:11}}>CLASS MEAN</div>
-          </div>
-          <div style={statBox}>
-            <div style={{fontWeight:900, fontSize:22}}>{passRate}%</div>
-            <div style={{fontWeight:700, fontSize:11}}>PASS RATE (ME+)</div>
-          </div>
+        <div style={{padding:"24px 24px 0"}}>
+          <div style={h2}>📊 Results Analysis — {label}</div>
+          <div style={{fontSize:12, color:"#666", marginTop:-8, marginBottom:14}}>{term} {year} · {marked.length} of {total} learner(s) with marks entered</div>
         </div>
 
-        <div style={sectionH}>Grade Distribution by Subject</div>
-        <div style={{overflowX:"auto"}}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={{...th,textAlign:"left"}}>Subject</th>
-                <th style={th}>Mean%</th>
-                <th style={th}>EE</th>
-                <th style={th}>ME</th>
-                <th style={th}>AE</th>
-                <th style={th}>BE</th>
-                <th style={th}>Marked</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SUBJECTS.map(s=>(
-                <tr key={s}>
-                  <td style={{...td,textAlign:"left",fontWeight:700}}>{s}</td>
-                  <td style={td}>{means[s]}</td>
-                  <td style={td}>{subjectDist[s].counts.EE}</td>
-                  <td style={td}>{subjectDist[s].counts.ME}</td>
-                  <td style={td}>{subjectDist[s].counts.AE}</td>
-                  <td style={td}>{subjectDist[s].counts.BE}</td>
-                  <td style={td}>{subjectDist[s].n}</td>
-                </tr>
+        <div style={{overflowY:"auto", flex:1, padding:"0 24px"}}>
+          <div ref={contentRef}>
+            <div style={sectionH}>Overall Distribution</div>
+            <div style={statGrid}>
+              {["EE","ME","AE","BE"].map(lv=>(
+                <div key={lv} style={statBox}>
+                  <div style={{fontWeight:900, fontSize:22}}>{levelCounts[lv]}</div>
+                  <div style={{fontWeight:700, fontSize:11}}>{lv}</div>
+                </div>
               ))}
-            </tbody>
-          </table>
+              <div style={statBox}>
+                <div style={{fontWeight:900, fontSize:22}}>{means["_classMean"]!=="–"?means["_classMean"]+"%":"–"}</div>
+                <div style={{fontWeight:700, fontSize:11}}>CLASS MEAN</div>
+              </div>
+              <div style={statBox}>
+                <div style={{fontWeight:900, fontSize:22}}>{passRate}%</div>
+                <div style={{fontWeight:700, fontSize:11}}>PASS RATE (ME+)</div>
+              </div>
+            </div>
+
+            <div style={sectionH}>Grade Distribution by Subject</div>
+            <div style={{overflowX:"auto"}}>
+              <table style={table}>
+                <thead>
+                  <tr>
+                    <th style={{...th,textAlign:"left"}}>Subject</th>
+                    <th style={th}>Mean%</th>
+                    <th style={th}>EE</th>
+                    <th style={th}>ME</th>
+                    <th style={th}>AE</th>
+                    <th style={th}>BE</th>
+                    <th style={th}>Marked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {SUBJECTS.map(s=>(
+                    <tr key={s}>
+                      <td style={{...td,textAlign:"left",fontWeight:700}}>{s}</td>
+                      <td style={td}>{means[s]}</td>
+                      <td style={td}>{subjectDist[s].counts.EE}</td>
+                      <td style={td}>{subjectDist[s].counts.ME}</td>
+                      <td style={td}>{subjectDist[s].counts.AE}</td>
+                      <td style={td}>{subjectDist[s].counts.BE}</td>
+                      <td style={td}>{subjectDist[s].n}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={sectionH}>Top 5 Performers</div>
+            {topPerformers.length === 0 ? (
+              <div style={{fontSize:12, color:"#888"}}>No marks entered yet.</div>
+            ) : (
+              <table style={table}>
+                <thead>
+                  <tr>
+                    <th style={th}>Rank</th>
+                    <th style={{...th,textAlign:"left"}}>Name</th>
+                    <th style={th}>Total</th>
+                    <th style={th}>Avg%</th>
+                    <th style={th}>Band</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topPerformers.map((l,i)=>{
+                    const g = l.total>0 ? getGrade(l.avg) : null;
+                    return (
+                      <tr key={l.name}>
+                        <td style={td}>{i+1}</td>
+                        <td style={{...td,textAlign:"left",fontWeight:700}}>{l.name}</td>
+                        <td style={td}>{l.total}</td>
+                        <td style={td}>{l.avg}%</td>
+                        <td style={td}>{g?g.sub:"–"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
 
-        <div style={sectionH}>Top 5 Performers</div>
-        {topPerformers.length === 0 ? (
-          <div style={{fontSize:12, color:"#888"}}>No marks entered yet.</div>
-        ) : (
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>Rank</th>
-                <th style={{...th,textAlign:"left"}}>Name</th>
-                <th style={th}>Total</th>
-                <th style={th}>Avg%</th>
-                <th style={th}>Band</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topPerformers.map((l,i)=>{
-                const g = l.total>0 ? getGrade(l.avg) : null;
-                return (
-                  <tr key={l.name}>
-                    <td style={td}>{i+1}</td>
-                    <td style={{...td,textAlign:"left",fontWeight:700}}>{l.name}</td>
-                    <td style={td}>{l.total}</td>
-                    <td style={td}>{l.avg}%</td>
-                    <td style={td}>{g?g.sub:"–"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-
-        <div style={{display:"flex", justifyContent:"flex-end", marginTop:20}}>
-          <button style={{background:"#000",color:"#fff",border:"none",borderRadius:7,padding:"10px 24px",cursor:"pointer",fontSize:14,fontWeight:700}}
+        <div style={{display:"flex", flexWrap:"wrap", justifyContent:"flex-end", gap:8, padding:"14px 24px", borderTop:"1px solid #eee"}}>
+          <button style={{background:"#fff",color:"#000",border:"1.5px solid #888",borderRadius:7,padding:"9px 16px",cursor:"pointer",fontSize:13,fontWeight:700}}
+            onClick={handlePrintAnalysis}>🖨 Print</button>
+          <button style={{background:"#fff",color:"#000",border:"1.5px solid #888",borderRadius:7,padding:"9px 16px",cursor:"pointer",fontSize:13,fontWeight:700}}
+            disabled={busy} onClick={handleDownloadAnalysis}>{busy?"Generating PDF…":"⬇ Download PDF"}</button>
+          <button style={{background:"#000",color:"#fff",border:"none",borderRadius:7,padding:"9px 20px",cursor:"pointer",fontSize:13,fontWeight:700}}
             onClick={onClose}>Close</button>
         </div>
       </div>
@@ -1683,6 +1753,7 @@ function PrintableClassList({ learners, grade, stream, term, year, classTeacher,
         <thead>
           <tr>
             <th style={{...CL.th,width:24}}>#</th>
+            <th style={{...CL.th,width:70}}>ASSM. NO.</th>
             <th style={{...CL.th,textAlign:"left",minWidth:130}}>LEARNER NAME</th>
             {SUBJECTS.map(s=><th key={s} style={CL.th}>{s}</th>)}
             {hasScores && <>
@@ -1701,6 +1772,7 @@ function PrintableClassList({ learners, grade, stream, term, year, classTeacher,
             return (
               <tr key={i} style={{background:i%2===0?"#fff":"#f9f9f9"}}>
                 <td style={CL.tdC}>{i+1}</td>
+                <td style={CL.tdC}>{l.admNo||"–"}</td>
                 <td style={CL.td}>{l.name}</td>
                 {SUBJECTS.map(sub=>{
                   const tot = subjectTotal(l.scores, sub);
@@ -1750,7 +1822,6 @@ function ReportCard({ learner, grade, stream, term, year, classTeacher, closingD
   const label = stream ? `Grade ${grade} ${stream}` : `Grade ${grade}`;
   const overallGrade = learner.total>0 ? getGrade(learner.avg) : null;
   const hasOverall = overallTotal>0;
-  const examLabel = /mid/i.test(term) ? "Mid Term" : /end/i.test(term) ? "End Term" : "Exam";
   const contactLine = [schoolPhone, schoolEmail].filter(Boolean).join(" · ");
   return (
     <div className="report-card" data-name={learner.name} style={RC.page}>
@@ -1764,6 +1835,7 @@ function ReportCard({ learner, grade, stream, term, year, classTeacher, closingD
       </div>
 
       <div style={RC.infoRow}>
+        <div style={RC.infoBlock}><span style={RC.infoLabel}>ASSESSMENT NO:</span><span style={RC.infoVal}>{learner.admNo||"—"}</span></div>
         <div style={RC.infoBlock}><span style={RC.infoLabel}>LEARNER:</span><span style={RC.infoVal}>{learner.name}</span></div>
         <div style={RC.infoBlock}><span style={RC.infoLabel}>CLASS:</span><span style={RC.infoVal}>{label}</span></div>
         <div style={RC.infoBlock}><span style={RC.infoLabel}>TERM:</span><span style={RC.infoVal}>{term}</span></div>
@@ -1775,9 +1847,7 @@ function ReportCard({ learner, grade, stream, term, year, classTeacher, closingD
         <thead>
           <tr>
             <th style={RC.th}>Subject</th>
-            <th style={RC.thC}>CAT (/30)</th>
-            <th style={RC.thC}>{examLabel} (/70)</th>
-            <th style={RC.thC}>Total (%)</th>
+            <th style={RC.thC}>Score (%)</th>
             <th style={RC.thC}>CBC Level</th>
             <th style={RC.thC}>Points</th>
             <th style={{...RC.thC}}>Grade Rank</th>
@@ -1787,13 +1857,10 @@ function ReportCard({ learner, grade, stream, term, year, classTeacher, closingD
           {SUBJECTS.map((sub,i)=>{
             const tot = subjectTotal(learner.scores, sub);
             const g=getGrade(tot);
-            const so = (learner.scores && learner.scores[sub]) || {cat:"",exam:""};
             const sRank = subjectRanks && subjectRanks[sub] ? subjectRanks[sub] : "–";
             return (
               <tr key={sub} style={{background:i%2===0?"#fff":"#f5f5f5"}}>
                 <td style={RC.td}><b>{sub}</b></td>
-                <td style={RC.tdC}>{so.cat!==""&&so.cat!==undefined?so.cat:"–"}</td>
-                <td style={RC.tdC}>{so.exam!==""&&so.exam!==undefined?so.exam:"–"}</td>
                 <td style={{...RC.tdC,fontWeight:800,fontSize:14}}>{tot!==""?tot:"–"}</td>
                 <td style={RC.tdC}>{g?<span style={RC.codeBadge}>{g.sub}</span>:"–"}</td>
                 <td style={{...RC.tdC,fontWeight:700}}>{g?.points||"–"}</td>
@@ -1899,6 +1966,7 @@ function ReportCard({ learner, grade, stream, term, year, classTeacher, closingD
 function ScoreEntryModal({ learner, grade, splitMode, classOptions, onSave, onClose }) {
   const [scores, setScores] = useState({...blankScores(),...learner.scores});
   const [name, setName] = useState(learner.name);
+  const [admNo, setAdmNo] = useState(learner.admNo || "");
   const opts = (classOptions && classOptions.length ? classOptions : [""]);
   const [streamSel, setStreamSel] = useState(learner.stream || opts[0] || "");
   return (
@@ -1907,6 +1975,10 @@ function ScoreEntryModal({ learner, grade, splitMode, classOptions, onSave, onCl
         <div style={{padding:"20px 20px 0"}}>
           <div style={M.title}>Edit Learner — {learner.name}</div>
           <div style={{display:"flex",gap:11,marginBottom:14,flexWrap:"wrap"}}>
+            <div style={{...M.field,flex:1,minWidth:130}}>
+              <label style={M.label}>Assessment No.</label>
+              <input style={M.input} value={admNo} onChange={e=>setAdmNo(e.target.value)} placeholder="e.g. 0142" />
+            </div>
             <div style={{...M.field,flex:2,minWidth:180}}>
               <label style={M.label}>Full Name</label>
               <input style={M.input} value={name} onChange={e=>setName(e.target.value.toUpperCase())} />
@@ -1922,45 +1994,25 @@ function ScoreEntryModal({ learner, grade, splitMode, classOptions, onSave, onCl
           </div>
         </div>
         <div style={{overflowY:"auto",flex:1,padding:"0 20px"}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:11,paddingBottom:14}}>
-            {SUBJECTS.map(sub=>{
-              const so = scores[sub] || {cat:"",exam:""};
-              const tot = subjectTotal(scores, sub);
-              return (
-                <div key={sub} style={{border:"1px solid #ddd",borderRadius:8,padding:8}}>
-                  <label style={{...M.label,marginBottom:6,display:"block"}}>{sub} <span style={{fontWeight:400,color:"#888"}}>({tot!==""?tot:"–"}/100)</span></label>
-                  <div style={{display:"flex",gap:6}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:10,color:"#888",marginBottom:2}}>CAT /30</div>
-                      <input style={M.input} type="number" min="0" max="30"
-                        value={so.cat}
-                        onChange={e=>{
-                          let v = e.target.value;
-                          if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(30, Number(v))); }
-                          setScores(p=>({...p,[sub]:{...(p[sub]||{cat:"",exam:""}),cat:v}}));
-                        }}
-                        placeholder="–" />
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:10,color:"#888",marginBottom:2}}>Exam /70</div>
-                      <input style={M.input} type="number" min="0" max="70"
-                        value={so.exam}
-                        onChange={e=>{
-                          let v = e.target.value;
-                          if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(70, Number(v))); }
-                          setScores(p=>({...p,[sub]:{...(p[sub]||{cat:"",exam:""}),exam:v}}));
-                        }}
-                        placeholder="–" />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div style={M.grid}>
+            {SUBJECTS.map(sub=>(
+              <div key={sub} style={M.field}>
+                <label style={M.label}>{sub}</label>
+                <input style={M.input} type="number" min="0" max="100"
+                  value={scores[sub]}
+                  onChange={e=>{
+                    let v = e.target.value;
+                    if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(100, Number(v))); }
+                    setScores(p=>({...p,[sub]:v}));
+                  }}
+                  placeholder="–" />
+              </div>
+            ))}
           </div>
         </div>
         <div style={{...M.actions,padding:"14px 20px",margin:0,borderTop:"1px solid #eee",background:"#fff"}}>
           <button style={M.cancel} onClick={onClose}>Cancel</button>
-          <button style={M.save} onClick={()=>onSave({name:name.trim()||learner.name, scores, stream:streamSel})}>Save</button>
+          <button style={M.save} onClick={()=>onSave({name:name.trim()||learner.name, admNo:admNo.trim(), scores, stream:streamSel})}>Save</button>
         </div>
       </div>
     </div>
@@ -1969,12 +2021,17 @@ function ScoreEntryModal({ learner, grade, splitMode, classOptions, onSave, onCl
 
 function AddLearnerModal({ grade, splitMode, defaultStream, classOptions, onAdd, onClose }) {
   const [name, setName] = useState("");
+  const [admNo, setAdmNo] = useState("");
   const opts = (classOptions && classOptions.length ? classOptions : [""]);
   const [streamSel, setStreamSel] = useState(defaultStream || opts[0] || "");
   return (
     <div style={M.overlay}>
       <div style={{...M.box,maxWidth:360}}>
         <div style={M.title}>Add New Learner</div>
+        <div style={M.field}>
+          <label style={M.label}>Assessment No.</label>
+          <input style={M.input} value={admNo} onChange={e=>setAdmNo(e.target.value)} placeholder="e.g. 0142"/>
+        </div>
         <div style={M.field}>
           <label style={M.label}>Full Name</label>
           <input style={M.input} value={name} onChange={e=>setName(e.target.value.toUpperCase())} placeholder="e.g. JANE WANJIKU"/>
@@ -1989,7 +2046,7 @@ function AddLearnerModal({ grade, splitMode, defaultStream, classOptions, onAdd,
         )}
         <div style={M.actions}>
           <button style={M.cancel} onClick={onClose}>Cancel</button>
-          <button style={M.save} onClick={()=>{if(name.trim())onAdd(name.trim(),streamSel);}}>Add Learner</button>
+          <button style={M.save} onClick={()=>{if(name.trim())onAdd(name.trim(),streamSel,admNo.trim());}}>Add Learner</button>
         </div>
       </div>
     </div>
@@ -2236,10 +2293,9 @@ function App() {
       const scoresArr = await loadShared(storageKey(subjectClass.grade, subjectClass.stream, subjectTerm, subjectYear), null);
       const scoreMap = {};
       if (scoresArr) scoresArr.forEach(l => {
-        const so = (l.scores && l.scores[subjectChoice]) || {cat:"",exam:""};
-        scoreMap[l.name] = { cat: so.cat ?? "", exam: so.exam ?? "" };
+        scoreMap[l.name] = (l.scores && l.scores[subjectChoice]) ?? "";
       });
-      const list = roster.map(l => ({ name: l.name, ...(scoreMap[l.name] || {cat:"",exam:""}) }));
+      const list = roster.map(l => ({ name: l.name, admNo: l.admNo||"", score: scoreMap[l.name] ?? "" }));
       list.sort((a,b)=>a.name.localeCompare(b.name));
       setSubjectList(list);
     } finally {
@@ -2253,7 +2309,7 @@ function App() {
     setSubjectSaving(true);
     try {
       const updates = {};
-      subjectList.forEach(row => { updates[row.name] = { cat: row.cat, exam: row.exam }; });
+      subjectList.forEach(row => { updates[row.name] = row.score; });
       const rosterNames = subjectList.map(row => row.name);
       const key = storageKey(subjectClass.grade, subjectClass.stream, subjectTerm, subjectYear);
       const ok = await saveSubjectScores(key, subjectChoice, updates, rosterNames);
@@ -2546,7 +2602,7 @@ function App() {
     const split = isSplitGrade(grade);
     const oldStream = learner.stream || stream;
     const newStream = split ? (payload.stream || oldStream) : "";
-    const updated = { name: payload.name, scores: payload.scores };
+    const updated = { name: payload.name, admNo: payload.admNo||"", scores: payload.scores };
 
     if (split && newStream !== oldStream) {
       // Move learner from old stream's list to the new one
@@ -2563,12 +2619,12 @@ function App() {
     setDirty(true);
   }
 
-  function handleAddLearner(name, streamSel) {
+  function handleAddLearner(name, streamSel, admNo) {
     const split = isSplitGrade(grade);
     const targetStream = split ? (streamSel || stream) : "";
     const lrns = getLearnersByStream(targetStream);
     if (lrns.find(l=>l.name===name)){setShowAddLearner(false);return;}
-    setLearnersByStream(targetStream, [...lrns,{name,scores:blankScores()}]);
+    setLearnersByStream(targetStream, [...lrns,{name,admNo:admNo||"",scores:blankScores()}]);
     setShowAddLearner(false);
     setDirty(true);
   }
@@ -2597,8 +2653,7 @@ function App() {
 <style>
   body{margin:0;background:#fff;font-family:Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .no-print{display:none!important;}
-  .report-card{page-break-after:always;}
-  .print-classlist{page-break-after:always;}
+  .report-card{page-break-inside:avoid;}
   @page{size:A4 ${isList?"landscape":"portrait"};margin:0.7cm;}
   table{border-collapse:collapse;}
   #__printBtnBar{position:sticky;top:0;background:#111;padding:10px;text-align:center;z-index:999;}
@@ -2659,13 +2714,8 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
       return;
     }
     const list = getLearnersByStream(stream);
-    const header = ["Name"];
-    SUBJECTS.forEach(s => header.push(`${s} CAT (/30)`, `${s} Exam (/70)`));
-    const rows = [header, ...list.map(l=>{
-      const row = [l.name];
-      SUBJECTS.forEach(s => { const so=(l.scores&&l.scores[s])||{cat:"",exam:""}; row.push(so.cat||"", so.exam||""); });
-      return row;
-    })];
+    const header = ["Assessment No.","Name", ...SUBJECTS];
+    const rows = [header, ...list.map(l=>[l.admNo||"", l.name, ...SUBJECTS.map(s=>l.scores[s]||"")])];
     downloadCSV(rows, `${getStreamLabel(grade,stream).replace(/\s/g,"_")}_MarksTemplate.csv`);
   }
 
@@ -2680,35 +2730,39 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
       const rows = parseCSVText(text);
       if (rows.length < 2) { alert("That file doesn't look like a valid CSV with a header row and data."); return; }
       const header = rows[0].map(h=>h.trim().toUpperCase());
+      const admIdx = header.findIndex(h=>h==="ASSESSMENT NO."||h==="ASSESSMENT NO"||h==="ADM NO."||h==="ADM NO");
+      const nameIdx = header.findIndex(h=>h==="NAME");
       const subjIdx = {};
       SUBJECTS.forEach(s=>{
-        const catIdx = header.findIndex(h=>h===`${s.toUpperCase()} CAT (/30)`);
-        const examIdx = header.findIndex(h=>h===`${s.toUpperCase()} EXAM (/70)`);
-        if (catIdx>-1 || examIdx>-1) subjIdx[s]={catIdx, examIdx};
+        const idx = header.findIndex(h=>h===s.toUpperCase());
+        if (idx>-1) subjIdx[s]=idx;
       });
       const list = [...getLearnersByStream(stream)];
       let updated=0, added=0;
       for (let r=1;r<rows.length;r++){
         const row = rows[r];
-        const rawName = (row[0]||"").trim();
+        const rawName = (row[nameIdx>-1?nameIdx:0]||"").trim();
         if (!rawName) continue;
         const name = rawName.toUpperCase();
+        const admNo = admIdx>-1 ? (row[admIdx]||"").trim() : "";
         const newScores = {};
         let any=false;
         SUBJECTS.forEach(s=>{
-          if (subjIdx[s]) {
-            const {catIdx, examIdx} = subjIdx[s];
-            const so = {cat:"", exam:""};
-            let hasAny=false;
-            if (catIdx>-1) { const raw=row[catIdx]; if (raw!==undefined && raw.trim()!==""){ let v=Number(raw); if(!isNaN(v)){ so.cat=Math.max(0,Math.min(30,v)); hasAny=true; } } }
-            if (examIdx>-1) { const raw=row[examIdx]; if (raw!==undefined && raw.trim()!==""){ let v=Number(raw); if(!isNaN(v)){ so.exam=Math.max(0,Math.min(70,v)); hasAny=true; } } }
-            if (hasAny) { newScores[s]=so; any=true; }
+          if (subjIdx[s]!==undefined) {
+            const raw = row[subjIdx[s]];
+            if (raw!==undefined && raw.trim()!=="") {
+              let v = Number(raw);
+              if (!isNaN(v)) { v = Math.max(0, Math.min(100, v)); newScores[s]=v; any=true; }
+            }
           }
         });
-        if (!any) continue;
         const idx = list.findIndex(l=>l.name===name);
-        if (idx>-1) { list[idx] = {...list[idx], scores:{...list[idx].scores,...newScores}}; updated++; }
-        else { list.push({name, scores:{...blankScores(),...newScores}}); added++; }
+        if (idx>-1) {
+          list[idx] = {...list[idx], admNo: admNo||list[idx].admNo||"", scores: any?{...list[idx].scores,...newScores}:list[idx].scores};
+          if (any) updated++;
+        } else if (any || admNo) {
+          list.push({name, admNo, scores:{...blankScores(),...newScores}}); added++;
+        }
       }
       setLearnersByStream(stream, list);
       setDirty(true);
@@ -2726,15 +2780,14 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
     }
     const list = getLearnersByStream(stream);
     const rows = list.map(l => {
-      const row = { "Name": l.name };
-      SUBJECTS.forEach(s => { const so=(l.scores&&l.scores[s])||{cat:"",exam:""}; row[`${s} CAT (/30)`]=so.cat||""; row[`${s} Exam (/70)`]=so.exam||""; });
+      const row = { "Assessment No.": l.admNo||"", "Name": l.name };
+      SUBJECTS.forEach(s => { row[s] = l.scores[s] || ""; });
       return row;
     });
-    const header = ["Name"]; SUBJECTS.forEach(s=>header.push(`${s} CAT (/30)`, `${s} Exam (/70)`));
     const ws = rows.length
       ? XLSX.utils.json_to_sheet(rows)
-      : XLSX.utils.aoa_to_sheet([header]);
-    ws["!cols"] = [{wch:26}, ...SUBJECTS.flatMap(()=>[{wch:11},{wch:11}])];
+      : XLSX.utils.aoa_to_sheet([["Assessment No.","Name", ...SUBJECTS]]);
+    ws["!cols"] = [{wch:14},{wch:26}, ...SUBJECTS.map(()=>({wch:10}))];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Marks Template");
     XLSX.writeFile(wb, `${getStreamLabel(grade,stream).replace(/\s/g,"_")}_MarksTemplate.xlsx`);
@@ -2754,11 +2807,11 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
       if (!data.length) { alert("That workbook doesn't have any rows to import."); return; }
       const headerKeys = Object.keys(data[0]);
       const nameKey = headerKeys.find(h => h.trim().toUpperCase()==="NAME") || headerKeys[0];
+      const admKey = headerKeys.find(h => ["ASSESSMENT NO.","ASSESSMENT NO","ADM NO.","ADM NO"].includes(h.trim().toUpperCase()));
       const subjKey = {};
       SUBJECTS.forEach(s=>{
-        const catKey = headerKeys.find(h => h.trim().toUpperCase()===`${s.toUpperCase()} CAT (/30)`);
-        const examKey = headerKeys.find(h => h.trim().toUpperCase()===`${s.toUpperCase()} EXAM (/70)`);
-        if (catKey || examKey) subjKey[s] = {catKey, examKey};
+        const found = headerKeys.find(h => h.trim().toUpperCase()===s.toUpperCase());
+        if (found) subjKey[s] = found;
       });
       const list = [...getLearnersByStream(stream)];
       let updated=0, added=0;
@@ -2766,22 +2819,25 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
         const rawName = String(row[nameKey]||"").trim();
         if (!rawName) return;
         const name = rawName.toUpperCase();
+        const admNo = admKey ? String(row[admKey]||"").trim() : "";
         const newScores = {};
         let any=false;
         SUBJECTS.forEach(s=>{
           if (subjKey[s]) {
-            const {catKey, examKey} = subjKey[s];
-            const so = {cat:"", exam:""};
-            let hasAny=false;
-            if (catKey) { const raw=row[catKey]; if (raw!==undefined && String(raw).trim()!==""){ let v=Number(raw); if(!isNaN(v)){ so.cat=Math.max(0,Math.min(30,v)); hasAny=true; } } }
-            if (examKey) { const raw=row[examKey]; if (raw!==undefined && String(raw).trim()!==""){ let v=Number(raw); if(!isNaN(v)){ so.exam=Math.max(0,Math.min(70,v)); hasAny=true; } } }
-            if (hasAny) { newScores[s]=so; any=true; }
+            const raw = row[subjKey[s]];
+            if (raw!==undefined && String(raw).trim()!=="") {
+              let v = Number(raw);
+              if (!isNaN(v)) { v = Math.max(0, Math.min(100, v)); newScores[s]=v; any=true; }
+            }
           }
         });
-        if (!any) return;
         const idx = list.findIndex(l=>l.name===name);
-        if (idx>-1) { list[idx] = {...list[idx], scores:{...list[idx].scores,...newScores}}; updated++; }
-        else { list.push({name, scores:{...blankScores(),...newScores}}); added++; }
+        if (idx>-1) {
+          list[idx] = {...list[idx], admNo: admNo||list[idx].admNo||"", scores: any?{...list[idx].scores,...newScores}:list[idx].scores};
+          if (any) updated++;
+        } else if (any || admNo) {
+          list.push({name, admNo, scores:{...blankScores(),...newScores}}); added++;
+        }
       });
       setLearnersByStream(stream, list);
       setDirty(true);
@@ -2800,13 +2856,8 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
       : (gradeCombined.perStream[currentClassList[0]] || []);
     const rows = list.map((l,i) => {
       const og = l.total>0?getGrade(l.avg):null;
-      const row = { "#": i+1, "Name": l.name, "Stream": l.stream||grade };
-      SUBJECTS.forEach(s => {
-        const so=(l.scores&&l.scores[s])||{cat:"",exam:""};
-        row[`${s} CAT`] = so.cat||"";
-        row[`${s} Exam`] = so.exam||"";
-        row[`${s} Total`] = subjectTotal(l.scores, s);
-      });
+      const row = { "#": i+1, "Assessment No.": l.admNo||"", "Name": l.name, "Stream": l.stream||grade };
+      SUBJECTS.forEach(s => { row[s] = l.scores[s] || ""; });
       row["Total"] = l.total||"";
       row["Avg%"] = l.total?l.avg:"";
       row["Points"] = l.total?l.points:"";
@@ -2815,13 +2866,13 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
       if (split) row["Grade Rank"] = l.overallRank||"";
       return row;
     });
-    const meanRow = { "#":"", "Name":"CLASS MEAN", "Stream":"" };
-    SUBJECTS.forEach(s => { meanRow[`${s} CAT`]=""; meanRow[`${s} Exam`]=""; meanRow[`${s} Total`] = means[s]; });
+    const meanRow = { "#":"", "Assessment No.":"", "Name":"CLASS MEAN", "Stream":"" };
+    SUBJECTS.forEach(s => { meanRow[s] = means[s]; });
     meanRow["Total"]=""; meanRow["Avg%"]=""; meanRow["Points"]=""; meanRow["Band"]=""; meanRow["Class Rank"]="";
     if (split) meanRow["Grade Rank"]="";
     rows.push(meanRow);
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [{wch:4},{wch:26},{wch:10}, ...SUBJECTS.flatMap(()=>[{wch:8},{wch:8},{wch:8}]), {wch:8},{wch:8},{wch:8},{wch:8},{wch:10},{wch:10}];
+    ws["!cols"] = [{wch:4},{wch:14},{wch:26},{wch:10}, ...SUBJECTS.map(()=>({wch:9})), {wch:8},{wch:8},{wch:8},{wch:8},{wch:10},{wch:10}];
     const wb = XLSX.utils.book_new();
     const lbl = split&&viewMode==="combined"?`${gradeLabel.replace(/\s/g,"")}_All`:getStreamLabel(grade,stream).replace(/\s/g,"_");
     XLSX.utils.book_append_sheet(wb, ws, lbl.slice(0,28));
@@ -2830,9 +2881,7 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
 
   function handleDownloadCSV() {
     const split = isSplitGrade(grade);
-    const header = ["#","Name","Stream"];
-    SUBJECTS.forEach(s => header.push(`${s} CAT`, `${s} Exam`, `${s} Total`));
-    header.push("Total","Avg%","Points","Band","Class Rank");
+    const header = ["#","Assessment No.","Name","Stream",...SUBJECTS,"Total","Avg%","Points","Band","Class Rank"];
     if (split) header.push("Grade Rank");
     const rows = [header];
     const list = split
@@ -2842,21 +2891,14 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
       : (gradeCombined.perStream[currentClassList[0]] || []);
     list.forEach((l,i)=>{
       const og = l.total>0?getGrade(l.avg):null;
-      const subjCells = [];
-      SUBJECTS.forEach(s => {
-        const so=(l.scores&&l.scores[s])||{cat:"",exam:""};
-        subjCells.push(so.cat||"", so.exam||"", subjectTotal(l.scores, s));
-      });
-      const row = [i+1, l.name, l.stream||grade, ...subjCells,
+      const row = [i+1, l.admNo||"", l.name, l.stream||grade, ...SUBJECTS.map(s=>l.scores[s]||""),
         l.total||"", l.total?l.avg:"", l.total?l.points:"",
         og?og.sub:"", l.total?l.rank:""];
       if (split) row.push(l.overallRank||"");
       rows.push(row);
     });
     // Add means row
-    const meanCells = [];
-    SUBJECTS.forEach(s => meanCells.push("","",means[s]));
-    const mr = ["","CLASS MEAN","",...meanCells,"","","","",""];
+    const mr = ["","","CLASS MEAN","",...SUBJECTS.map(s=>means[s]),"","","","",""];
     if (split) mr.push("");
     rows.push(mr);
     const lbl = split&&viewMode==="combined"?`${gradeLabel.replace(/\s/g,"")}_All`:getStreamLabel(grade,stream).replace(/\s/g,"_");
@@ -3077,7 +3119,6 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
   if (page === "subjectEntry") {
     if (!subjectSession || !subjectClass || !subjectChoice) { logout(); return null; }
     const clsLabel = `Grade ${subjectClass.grade}${subjectClass.stream?` ${subjectClass.stream}`:""}`;
-    const subjectEntryExamLabel = /mid/i.test(subjectTerm) ? "Mid Term" : /end/i.test(subjectTerm) ? "End Term" : "Exam";
     return (
       <div style={S.page}>
         <div style={S.topBar} className="no-print">
@@ -3119,40 +3160,29 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
               <thead>
                 <tr style={{borderBottom:"2px solid #000"}}>
                   <th style={{textAlign:"left",padding:"8px 6px"}}>#</th>
+                  <th style={{textAlign:"left",padding:"8px 6px"}}>Assessment No.</th>
                   <th style={{textAlign:"left",padding:"8px 6px"}}>Name</th>
-                  <th style={{textAlign:"left",padding:"8px 6px"}}>CAT<br/><span style={{fontWeight:400,fontSize:11}}>/30</span></th>
-                  <th style={{textAlign:"left",padding:"8px 6px"}}>{subjectEntryExamLabel}<br/><span style={{fontWeight:400,fontSize:11}}>/70</span></th>
-                  <th style={{textAlign:"left",padding:"8px 6px"}}>Total</th>
+                  <th style={{textAlign:"left",padding:"8px 6px"}}>{subjectChoice} Score</th>
                   <th style={{textAlign:"left",padding:"8px 6px"}}>Level</th>
                 </tr>
               </thead>
               <tbody>
                 {subjectList.map((row,i)=>{
-                  const tot = subjectTotal({[subjectChoice]:{cat:row.cat,exam:row.exam}}, subjectChoice);
-                  const g = getGrade(tot);
+                  const g = getGrade(row.score);
                   return (
                     <tr key={row.name} style={{borderBottom:"1px solid #ddd"}}>
-                      <td style={{padding:"6px"}}>{i+1}</td>
+                      <td style={{padding:"6px",color:"#888"}}>{i+1}</td>
+                      <td style={{padding:"6px",color:"#888"}}>{row.admNo||"—"}</td>
                       <td style={{padding:"6px",fontWeight:600}}>{row.name}</td>
                       <td style={{padding:"6px"}}>
-                        <input type="number" min="0" max="30" style={{...S.input,width:64}}
-                          value={row.cat}
+                        <input type="number" min="0" max="100" style={{...S.input,width:80}}
+                          value={row.score}
                           onChange={e=>{
                             let v = e.target.value;
-                            if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(30, Number(v))); }
-                            setSubjectList(list => list.map((r,idx)=> idx===i ? {...r, cat:v} : r));
+                            if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(100, Number(v))); }
+                            setSubjectList(list => list.map((r,idx)=> idx===i ? {...r, score:v} : r));
                           }} />
                       </td>
-                      <td style={{padding:"6px"}}>
-                        <input type="number" min="0" max="70" style={{...S.input,width:64}}
-                          value={row.exam}
-                          onChange={e=>{
-                            let v = e.target.value;
-                            if (v!=="" && !isNaN(v)) { v = Math.max(0, Math.min(70, Number(v))); }
-                            setSubjectList(list => list.map((r,idx)=> idx===i ? {...r, exam:v} : r));
-                          }} />
-                      </td>
-                      <td style={{padding:"6px",fontWeight:800}}>{tot!==""?tot:"–"}</td>
                       <td style={{padding:"6px",color:"#555"}}>{g?g.sub:"—"}</td>
                     </tr>
                   );
@@ -3210,6 +3240,8 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
             label={label}
             term={term}
             year={year}
+            schoolName={schoolName}
+            schoolCounty={schoolCounty}
             onClose={()=>setShowAnalysis(false)}
           />
         )}
@@ -3300,6 +3332,7 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
                 <th style={S.th}>Class Rank</th>
                 {split && <th style={S.th}>Gr. Rank</th>}
                 {viewMode==="combined" && <th style={S.th}>Stream</th>}
+                <th style={{...S.th,textAlign:"left",minWidth:80}}>Assm. No.</th>
                 <th style={{...S.th,textAlign:"left",minWidth:140}}>Name</th>
                 {SUBJECTS.map(s=><th key={s} style={S.th}>{s}</th>)}
                 <th style={S.th}>Total</th>
@@ -3325,6 +3358,7 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
                     {viewMode==="combined" && (
                       <td style={{...S.tdC,borderRight:"1px solid #e0e0e0",fontSize:10}}>{l.stream}</td>
                     )}
+                    <td style={{...S.tdC,borderRight:"1px solid #e0e0e0",fontSize:11}}>{l.admNo||"–"}</td>
                     <td style={{...S.td,fontWeight:700,borderRight:"1px solid #e0e0e0"}}>{l.name}</td>
                     {SUBJECTS.map(sub=>{
                       const tot = subjectTotal(l.scores, sub);
@@ -3459,7 +3493,7 @@ const S = {
 };
 
 const RC = {
-  page:        {background:"#fff",color:"#000",width:"190mm",margin:"0 auto 30px",padding:"10mm 12mm",fontFamily:"Arial,sans-serif",fontSize:11,boxSizing:"border-box",border:"1px solid #888"},
+  page:        {background:"#fff",color:"#000",width:"190mm",minHeight:"160mm",margin:"0 auto 4mm",padding:"10mm 12mm",fontFamily:"Arial,sans-serif",fontSize:11,boxSizing:"border-box",border:"1px solid #888"},
   header:      {borderBottom:"3px solid #000",marginBottom:8,paddingBottom:7,textAlign:"center"},
   schoolName:  {fontSize:20,fontWeight:900,letterSpacing:1,color:"#000"},
   schoolSub:   {fontSize:10,color:"#444"},

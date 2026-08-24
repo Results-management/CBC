@@ -1,14 +1,16 @@
-# School Results App — CAT + Exam Edition
+# School Results App
 
-Adapted from the same base app, with two structural changes:
+Adapted from the same base app, with one structural change: **CRE renamed to
+RE** (Religious Education), since learners follow either CRE or IRE.
 
-1. **Every subject is scored as CAT (out of 30) + Exam (out of 70) = Total (out of 100)**,
-   for both Mid Term and End Term assessments.
-2. **CRE renamed to RE** (Religious Education), since learners follow either CRE or IRE.
+Every subject is scored as a single mark out of 100, for both Mid Term and
+End Term assessments. Every learner also has an **Assessment Number**, set
+when they're registered, editable anytime, and shown on the report card,
+class list, and every export.
 
-Everything else — single-stream or multi-class grades, School Settings, Manage
-Classes, Year Advancement Wizard, Excel/CSV, Results Analysis — works the same
-as before.
+Everything else — single-stream or multi-class grades, School Settings,
+Manage Classes, Year Advancement Wizard, Excel/CSV, Results Analysis (now
+printable and downloadable as a PDF) — works as described below.
 
 ## Files
 - `index.html` — the whole app
@@ -27,8 +29,8 @@ as before.
    under ✏️ Manage Team.
 3. Go to **🏫 School Settings** and fill in your school's header exactly as
    you want it to print — School Name, P.O. Box, County, Motto, Phone, Email.
-   Leave any field blank to leave it off the header entirely. This is what
-   appears on the login screen, class lists, and report cards:
+   Leave any field blank to leave it off the header entirely. This appears on
+   the login screen, class lists, and report cards:
 
    ```
    YOUR SCHOOL NAME
@@ -59,48 +61,55 @@ as before.
 | Creative Arts & Sports | `creativearts` | `cas2026` | Grades 7–9 |
 | Class Teacher, Grade 7/8/9 | `classteacher7`/`8`/`9` | `2026` | One grade each |
 
-## How CAT + Exam works
-- **Marks entry** (both the subject-teacher's day-to-day screen and the
-  admin's "Edit Learner" tool) shows two boxes per subject: **CAT** (capped
-  at 30) and **Exam** (capped at 70, labeled "Mid Term" or "End Term"
-  depending which is currently selected).
-- The **Total** (CAT + Exam, out of 100) is computed automatically everywhere
-  — grading bands, class ranking, class means, subject means, Results
-  Analysis — nothing needs to be entered as a single combined number.
-- The **report card** shows all three: CAT, the exam score, and Total, per
-  subject — matching a physical mark sheet.
-- The whole-class list (many learners × many subjects on one page) shows just
-  the Total per subject, to keep it printable — the CAT/Exam breakdown is on
-  each learner's individual report card.
-- **Excel and CSV** exports/imports include CAT and Exam as separate columns
-  for every subject (plus a computed Total column), so you can prepare marks
-  offline in the same format.
+## Registering learners
+Every learner has two identifying fields: **Assessment Number** (their
+admission/exam number) and **Full Name**. Both are set when you add a
+learner, and both can be edited later:
+- **+ Learner** button on the results screen (class teacher / admin)
+- **Edit** on any learner's row (opens Assessment No., Name, and marks — all editable)
+- During the **Year Advancement Wizard**, when registering a new Grade 7 intake
+- Via **CSV/Excel import** — include an "Assessment No." column alongside Name
+
+Assessment Numbers carry forward automatically when a class is promoted a
+grade via the Year Advancement Wizard.
 
 ## What every role can do
 - **Admin** — everything: connect the database, School Settings, Manage
   Classes, Manage Team, Year Setup, all downloads/prints.
 - **Class Teacher** — their assigned grade only: register/edit learners,
   enter marks for any subject if needed, comments, print/download, CSV/Excel.
-- **Subject Teacher** — any class, their one subject: CAT/Exam entry, grade
-  distribution, print/download for that subject's data.
+- **Subject Teacher** — any class, their one subject: marks entry (with
+  Assessment Numbers shown for reference), grade distribution, print/download
+  for that subject's data.
+
+## Downloads, printing, and analysis
+- **⬇ Download buttons produce real PDF files** (via a client-side PDF
+  generator), for the blank class list, results list, all report forms, and
+  individual report cards. "All Report Forms" for a full class can take a
+  few seconds — the button shows "Generating PDF…" while it works.
+- **🖨 Print buttons** open the browser's print dialog as an alternative —
+  also lets you choose "Save as PDF" there if you prefer.
+- **📊 Results Analysis** — overall distribution, class mean, pass rate,
+  per-subject grade distribution and means, and a Top 5 performers list.
+  Has its own 🖨 Print and ⬇ Download PDF buttons.
+- **Excel and CSV** exports/imports include Assessment No., Name, and one
+  column per subject, so you can prepare marks offline in the same format.
 
 ## Notes
+- **Fixed a real paper-waste bug**: report cards were forcing one card per
+  printed page even though each card only fills part of a page — so a class
+  of 30 was printing 30 pages with a lot of wasted blank space. That forced
+  break is removed. Each report card is guaranteed to be **more than half a
+  page** (a firm height floor, well over half of A4), so it always looks
+  substantial and never gets awkwardly split across a page break — it just
+  no longer forces a needless extra blank page after itself. Applies to both
+  the 🖨 Print and ⬇ Download PDF paths.
 - Data lives in `db.json` in your GitHub repo — every teacher's device stays
   in sync automatically as long as they're connected.
-- **⬇ Download buttons now produce real PDF files** (using a client-side PDF
-  generator), not HTML. Downloading "All Report Forms" for a full class can
-  take a few seconds — the button shows "Generating PDF…" while it works.
-  The 🖨 Print buttons still open the browser's print dialog as before,
-  which also lets you choose "Save as PDF" if you prefer that route.
-- **The "Edit Learner" screen now scrolls properly** — the Save/Cancel
-  buttons stay pinned at the bottom while the subject list scrolls above them,
-  so they're always reachable on a phone screen.
-- **The header no longer adds a redundant "Junior Secondary School" line** —
-  it shows exactly what you enter in School Settings (name, P.O. Box,
-  county, motto, contact) and nothing else.
-- Report cards and class lists print via the browser's Print dialog
-  (Print → Save as PDF).
 - Never share your GitHub Personal Access Token outside the app's own
   Database Settings screen.
 - One GitHub repo = one school. This is a separate deployment from any other
   school's app — its own repo, its own data, its own School Settings.
+- After uploading an update to `index.html`, clear site data once (or check
+  in a private/incognito tab) — the app caches itself for offline use, so a
+  stale cached copy can otherwise keep showing until that's cleared.
